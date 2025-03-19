@@ -35,7 +35,7 @@ jobs:
           # Wait a bit for the app to start
           sleep 10
           # Check if the app is running
-          curl --silent --fail http://localhost:8000/health || (echo "FastAPI app failed to start" && exit 1)
+          curl --silent --fail http://localhost:8000/ || (echo "FastAPI app failed to start" && exit 1)
 
       # Step 5: Run tests using pytest
       - name: Run tests
