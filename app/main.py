@@ -1,10 +1,34 @@
 from fastapi import FastAPI
-from app.routes import router
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import uvicorn
+import os
+from .routers.inventory_router import router as inventory_router
+from .db.database import Base, engine
 
-app = FastAPI(title="Service API")
+# Create tables in the database
+Base.metadata.create_all(bind=engine)
 
-app.include_router(router)
+app = FastAPI(
+    title="Inventory Service",
+    description="Manages inventory for shops in PixelBloom",
+    version="1.0.0"
+)
 
-@app.get("/")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+app.include_router(inventory_router)
+
+@app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {"status": "healthy"}
+
+if __name__ == "__main__":
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)
