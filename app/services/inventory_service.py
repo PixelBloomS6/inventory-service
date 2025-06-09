@@ -15,7 +15,7 @@ class InventoryService:
         
         # Publish inventory item created event
         self.publisher.publish_event(
-            exchange="inventory_events",
+            exchange="shop_events",  # Changed from inventory_events to shop_events
             routing_key="inventory.created",
             body={
                 "event_type": "inventory_item_created",
@@ -42,7 +42,7 @@ class InventoryService:
         if updated_item:
             # Publish inventory item updated event
             self.publisher.publish_event(
-                exchange="inventory_events",
+                exchange="shop_events",  # Changed from inventory_events to shop_events
                 routing_key="inventory.updated",
                 body={
                     "event_type": "inventory_item_updated",
@@ -64,7 +64,7 @@ class InventoryService:
         if success:
             # Publish inventory item deleted event
             self.publisher.publish_event(
-                exchange="inventory_events",
+                exchange="shop_events",  # Changed from inventory_events to shop_events
                 routing_key="inventory.deleted",
                 body={
                     "event_type": "inventory_item_deleted",
@@ -74,3 +74,39 @@ class InventoryService:
             )
         
         return success
+        
+    # Add missing methods for image handling
+    def update_item_images(self, item_id: uuid.UUID, image_urls: List[str]) -> Optional[InventoryItem]:
+        """Update the item with new image URLs, replacing existing ones"""
+        item_update = InventoryItemUpdate(image_urls=image_urls)
+        return self.update_item(item_id, item_update)
+        
+    def add_item_images(self, item_id: uuid.UUID, new_image_urls: List[str]) -> Optional[InventoryItem]:
+        """Add additional image URLs to an item"""
+        # Get current item
+        item = self.get_item(item_id)
+        if not item:
+            return None
+            
+        # Combine existing and new image URLs
+        current_urls = item.image_urls if item.image_urls else []
+        updated_urls = current_urls + new_image_urls
+        
+        # Update the item
+        item_update = InventoryItemUpdate(image_urls=updated_urls)
+        return self.update_item(item_id, item_update)
+        
+    def remove_item_image(self, item_id: uuid.UUID, image_url: str) -> Optional[InventoryItem]:
+        """Remove a specific image URL from an item"""
+        # Get current item
+        item = self.get_item(item_id)
+        if not item:
+            return None
+            
+        # Remove the specific URL
+        current_urls = item.image_urls if item.image_urls else []
+        updated_urls = [url for url in current_urls if url != image_url]
+        
+        # Update the item
+        item_update = InventoryItemUpdate(image_urls=updated_urls)
+        return self.update_item(item_id, item_update)

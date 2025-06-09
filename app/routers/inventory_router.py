@@ -1,5 +1,4 @@
-# inventory-service/app/controllers/inventory_controller.py
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -9,6 +8,7 @@ from ..models.domain.inventory import InventoryItem, InventoryItemCreate, Invent
 from ..services.inventory_service import InventoryService
 from ..services.blob_storage_service import BlobStorageService
 from ..messaging.publisher import RabbitMQPublisher
+from ..dependencies.auth import require_role
 
 router = APIRouter(
     prefix="/inventory",
@@ -23,7 +23,6 @@ def get_publisher():
     finally:
         publisher.close()
 
-# Create inventory item with images
 @router.post("/items/", response_model=InventoryItem, status_code=status.HTTP_201_CREATED)
 async def create_inventory_item(
     shop_id: uuid.UUID = Form(...),
@@ -34,7 +33,7 @@ async def create_inventory_item(
     quantity: int = Form(...),
     images: List[UploadFile] = File(None),
     db: Session = Depends(get_db),
-    publisher: RabbitMQPublisher = Depends(get_publisher)
+    publisher: RabbitMQPublisher = Depends(get_publisher),
 ):
     # Create inventory item
     item_data = InventoryItemCreate(
@@ -60,6 +59,19 @@ async def create_inventory_item(
         return updated_item
     
     return created_item
+
+# Get all inventory items for a specific shop
+@router.get("/shop/{shop_id}", response_model=List[InventoryItem])
+async def get_shop_inventory(
+    shop_id: uuid.UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    publisher: RabbitMQPublisher = Depends(get_publisher)
+):
+    inventory_service = InventoryService(db, publisher)
+    items = inventory_service.get_items_by_shop(shop_id, skip, limit)
+    return items
 
 # Add images to existing inventory item
 @router.post("/items/{item_id}/images", response_model=InventoryItem)

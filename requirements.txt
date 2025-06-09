@@ -11,3 +11,5 @@ psycopg2-binary
 pydantic[email]
 python-dotenv
 azure-storage-blob==12.16.0
+python-jose[cryptography]
+jose

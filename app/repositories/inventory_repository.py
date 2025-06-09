@@ -62,7 +62,7 @@ class InventoryRepository:
             category=db_item.category,
             price=db_item.price,
             quantity=db_item.quantity,
-            image_url=db_item.image_url,
+            image_urls=db_item.image_urls,  # Changed from image_url to image_urls
             created_at=db_item.created_at,
             updated_at=db_item.updated_at,
             is_active=db_item.is_active
