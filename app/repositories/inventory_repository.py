@@ -14,7 +14,7 @@ class InventoryRepository:
         self.db.commit()
         self.db.refresh(db_item)
         return self._map_to_domain(db_item)
-
+ 
     def get_by_id(self, item_id: uuid.UUID) -> Optional[InventoryItem]:
         db_item = self.db.query(InventoryItemModel).filter(InventoryItemModel.id == item_id).first()
         if not db_item:
