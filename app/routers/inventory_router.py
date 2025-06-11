@@ -6,9 +6,9 @@ import json
 from ..db.database import get_db
 from ..models.domain.inventory import InventoryItem, InventoryItemCreate, InventoryItemUpdate
 from ..services.inventory_service import InventoryService
-from ..services.blob_storage_service import BlobStorageService
+# from ..services.blob_storage_service import BlobStorageService
 # from ..messaging.publisher import RabbitMQPublisher
-from ..dependencies.auth import require_role
+#from ..dependencies.auth import require_role
 
 router = APIRouter(
     prefix="/inventory",
@@ -50,12 +50,12 @@ async def create_inventory_item(
     
     # Upload images if provided
     if images:
-        blob_service = BlobStorageService()
-        image_urls = await blob_service.upload_images(images, created_item.id)
+        # blob_service = BlobStorageService()
+        # image_urls = await blob_service.upload_images(images, created_item.id)
         
         # Update item with image URLs
         item_update = InventoryItemUpdate()
-        updated_item = inventory_service.update_item_images(created_item.id, image_urls)
+        updated_item = inventory_service.update_item_images(created_item.id)
         return updated_item
     
     return created_item
