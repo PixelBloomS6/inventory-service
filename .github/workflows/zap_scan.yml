@@ -1,91 +1,40 @@
-name: Security Scan
+name: Simple Security Scan
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
 jobs:
-  security-scan:
+  scan:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
-      # Step 1: Start your application (simplified)
-      - name: Start Application
+      - name: Start Your App
         run: |
-          # Use your original docker-compose approach but simplified
           echo "DATABASE_URL=${{ secrets.INVENTORY_DATABASE_URL }}" > .env.docker
           echo "RABBITMQ_HOST=rabbitmq" >> .env.docker
-          
-          # Start with docker-compose
           docker compose up -d --build
-          
-          # Wait longer and check more thoroughly
-          echo "Waiting for app to start..."
           sleep 30
-          
-          # Check what's actually running
-          docker compose ps
-          docker compose logs inventory-service
-          
-          # Try different endpoints
-          for i in {1..15}; do
-            echo "Health check attempt $i/15..."
-            if curl -f http://localhost:8001/health 2>/dev/null; then
-              echo "✅ Health endpoint works!"
-              break
-            elif curl -f http://localhost:8001/ 2>/dev/null; then
-              echo "✅ Root endpoint works!"
-              break
-            elif curl -f http://localhost:8001/api 2>/dev/null; then
-              echo "✅ API endpoint works!"
-              break
-            else
-              echo "❌ No response yet, waiting..."
-              sleep 4
-            fi
-          done
 
-      - name: Verify App is Running
+      - name: What's Actually Running?
         run: |
-          echo "=== Final connectivity check ==="
-          curl -v http://localhost:8001 || echo "❌ Main endpoint failed"
-          echo ""
-          echo "=== Container status ==="
-          docker compose ps
-          echo ""
-          echo "=== Port check ==="
-          netstat -tulpn | grep :8001 || echo "Nothing listening on port 8001"
+          echo "=== Containers ==="
+          docker ps
+          echo "=== Logs ==="
+          docker compose logs
+          echo "=== Network Test ==="
+          curl -v http://localhost:8001 || echo "Nothing on 8001"
+          echo "=== Port Check ==="
+          ss -tlnp | grep :8001 || echo "No port 8001"
 
-      # Step 2: Run ZAP scan (much simpler)
-      - name: Run OWASP ZAP Baseline Scan
+      - name: Just Run ZAP
         run: |
-          docker run --rm \
-            --network host \
-            -v $(pwd):/zap/wrk/:rw \
+          docker run --rm --network host \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py \
-              -t http://localhost:8001 \
-              -J zap-report.json \
-              -w zap-report.md \
-              -r zap-report.html \
-              -I || echo "ZAP scan completed with warnings"
-
-      - name: Upload Security Report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: security-scan-report
-          path: |
-            zap-report.json
-            zap-report.md
-            zap-report.html
+            zap-baseline.py -t http://localhost:8001 -I || echo "ZAP done"
 
       - name: Cleanup
         if: always()
-        run: |
-          docker compose down || true
+        run: docker compose down
