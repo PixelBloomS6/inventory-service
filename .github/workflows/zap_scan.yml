@@ -22,11 +22,24 @@ jobs:
           POSTGRES_DB=inventory_db
           EOF
           
-          echo "🚀 Starting all services..."
-          docker compose up -d --build
+          echo "🚀 Starting database first..."
+          docker compose up -d db rabbitmq
           
-          echo "⏳ Waiting for services to be ready..."
-          sleep 45  # Give database time to start
+          echo "⏳ Waiting for database to be ready..."
+          for i in {1..30}; do
+            if docker compose exec -T db pg_isready -U postgres 2>/dev/null; then
+              echo "✅ Database is ready!"
+              break
+            fi
+            echo "Waiting for database... ($i/30)"
+            sleep 2
+          done
+          
+          echo "🚀 Now starting the app..."
+          docker compose up -d --build app
+          
+          echo "⏳ Waiting for app to start..."
+          sleep 30
           
           echo "📊 Container status:"
           docker compose ps
