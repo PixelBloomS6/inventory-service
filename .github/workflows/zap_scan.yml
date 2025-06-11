@@ -10,31 +10,53 @@ jobs:
   zap_scan:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: inventory_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up .env.docker
+        run: |
+          echo "DATABASE_URL=${{ secrets.INVENTORY_DATABASE_URL }}" >> ./inventory-service/.env.docker
+          echo "RABBITMQ_HOST=rabbitmq" >> ./inventory-service/.env.docker
+
       - name: Build and Run App with Docker Compose
         run: |
-            docker compose up -d --build
-            echo "Waiting for the app to start..."
-            sleep 15
+          docker compose up -d --build
+          echo "Waiting for the app to start..."
+          sleep 20
 
       - name: Print Docker Compose Logs
         run: docker compose logs
 
       - name: Check if app is running
         run: |
-            curl --fail http://localhost:8001 || (echo "App failed to start on localhost:8001" && exit 1)
+          curl --fail http://localhost:8001 || (echo "App failed to start on localhost:8001" && exit 1)
 
       - name: Run ZAP Baseline Scan
         run: |
+          docker network create zapnet || true
+          docker network connect zapnet inventory-service || true
           docker run --rm \
-            --network inventory-service_zapnet \
+            --network zapnet \
             -v $(pwd):/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
-              -t http://app:8001 \
+              -t http://inventory-service:8001 \
               -J report_json.json \
               -w report_md.md \
               -r report_html.html || true
