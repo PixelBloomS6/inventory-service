@@ -1,0 +1,47 @@
+name: OWASP ZAP Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  zap_scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        run: |
+          docker compose up -d
+          echo "Waiting for the app to start..."
+          sleep 15
+
+      - name: Check if app is running
+        run: |
+          docker ps
+          curl --fail http://localhost:8001 || (echo "App failed to start" && docker logs $(docker ps -q) && exit 1)
+
+      - name: Run ZAP Baseline Scan
+        run: |
+          docker run --rm \
+            --network inventory-service_zapnet \
+            -v $(pwd):/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+              -t http://app:8001 \
+              -J report_json.json \
+              -w report_md.md \
+              -r report_html.html || true
+
+      - name: Upload ZAP Scan Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: |
+            report_json.json
+            report_md.md
+            report_html.html
