@@ -1,91 +1,80 @@
-name: Security Scan
+name: Debug and Scan
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
 jobs:
-  security-scan:
+  scan:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
-      # Step 1: Start your application (simplified)
-      - name: Start Application
+      - name: Start and Debug App
         run: |
-          # Use your original docker-compose approach but simplified
           echo "DATABASE_URL=${{ secrets.INVENTORY_DATABASE_URL }}" > .env.docker
           echo "RABBITMQ_HOST=rabbitmq" >> .env.docker
           
-          # Start with docker-compose
+          echo "🚀 Starting containers..."
           docker compose up -d --build
-          
-          # Wait longer and check more thoroughly
-          echo "Waiting for app to start..."
           sleep 30
           
-          # Check what's actually running
+          echo "📊 Container status:"
           docker compose ps
+          
+          echo "📋 Full logs:"
           docker compose logs
           
-          # Try different endpoints
-          for i in {1..15}; do
-            echo "Health check attempt $i/15..."
-            if curl -f http://localhost:8001/health 2>/dev/null; then
-              echo "✅ Health endpoint works!"
+          echo "🔍 What's listening on ports:"
+          docker compose exec -T app netstat -tlnp 2>/dev/null || echo "netstat failed"
+          
+          echo "🌐 Port mapping check:"
+          docker port $(docker compose ps -q app) 2>/dev/null || echo "No port mapping found"
+          
+          echo "🔌 Testing connectivity:"
+          for port in 8000 8001 3000 5000 80; do
+            echo "Testing port $port..."
+            curl -I http://localhost:$port 2>/dev/null && echo "✅ Port $port works!" || echo "❌ Port $port failed"
+          done
+          
+          echo "🐳 Container inspect:"
+          docker compose exec -T app ps aux 2>/dev/null || echo "ps failed"
+
+      - name: Run ZAP (only if app responds)
+        run: |
+          # Find which port actually works
+          APP_PORT=""
+          for port in 8000 8001 3000 5000 80; do
+            if curl -f http://localhost:$port 2>/dev/null; then
+              APP_PORT=$port
+              echo "✅ Found working port: $port"
               break
-            elif curl -f http://localhost:8001/ 2>/dev/null; then
-              echo "✅ Root endpoint works!"
-              break
-            elif curl -f http://localhost:8001/api 2>/dev/null; then
-              echo "✅ API endpoint works!"
-              break
-            else
-              echo "❌ No response yet, waiting..."
-              sleep 4
             fi
           done
+          
+          if [ -n "$APP_PORT" ]; then
+            echo "🔍 Running ZAP scan on port $APP_PORT"
+            docker run --rm --network host \
+              -v $(pwd):/zap/wrk/:rw \
+              ghcr.io/zaproxy/zaproxy:stable \
+              zap-baseline.py \
+                -t http://localhost:$APP_PORT \
+                -J zap-report.json \
+                -I || echo "ZAP completed with warnings"
+          else
+            echo "❌ No working port found - skipping ZAP scan"
+            echo "Check the logs above to see why your app isn't starting"
+            exit 1
+          fi
 
-      - name: Verify App is Running
-        run: |
-          echo "=== Final connectivity check ==="
-          curl -v http://localhost:8001 || echo "❌ Main endpoint failed"
-          echo ""
-          echo "=== Container status ==="
-          docker compose ps
-          echo ""
-          echo "=== Port check ==="
-          netstat -tulpn | grep :8001 || echo "Nothing listening on port 8001"
-
-      # Step 2: Run ZAP scan (much simpler)
-      - name: Run OWASP ZAP Baseline Scan
-        run: |
-          docker run --rm \
-            --network host \
-            -v $(pwd):/zap/wrk/:rw \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py \
-              -t http://localhost:8001 \
-              -J zap-report.json \
-              -w zap-report.md \
-              -r zap-report.html \
-              -I || echo "ZAP scan completed with warnings"
-
-      - name: Upload Security Report
+      - name: Upload Report
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: security-scan-report
-          path: |
-            zap-report.json
-            zap-report.md
-            zap-report.html
+          name: zap-report
+          path: zap-report.json
 
       - name: Cleanup
         if: always()
-        run: |
-          docker compose down || true
+        run: docker compose down
