@@ -14,16 +14,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Compose
+      - name: Build and Run App with Docker Compose
         run: |
-          docker compose up -d
-          echo "Waiting for the app to start..."
-          sleep 15
+            docker compose up -d --build
+            echo "Waiting for the app to start..."
+            sleep 15
+
+      - name: Print Docker Compose Logs
+        run: docker compose logs
 
       - name: Check if app is running
         run: |
-          docker ps
-          curl --fail http://localhost:8001 || (echo "App failed to start" && docker logs $(docker ps -q) && exit 1)
+            curl --fail http://localhost:8001 || (echo "App failed to start on localhost:8001" && exit 1)
 
       - name: Run ZAP Baseline Scan
         run: |
