@@ -1,0 +1,13 @@
+sonar.projectKey=PixelBloom
+sonar.organization=sqp_9eb2f9c44ab80fc196e05d4a62970bc62d830ae6
+sonar.host.url=http://localhost:9000
+
+# Sources
+sonar.sources=app
+sonar.exclusions=**/*_test.py,**/tests/**,**/__pycache__/**
+
+# Coverage
+sonar.python.coverage.reportPaths=coverage.xml
+
+# Language
+sonar.language=python
