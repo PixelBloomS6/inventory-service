@@ -7,6 +7,7 @@ from ..models.domain.inventory import InventoryItem, InventoryItemCreate, Invent
 class InventoryRepository:
     def __init__(self, db: Session):
         self.db = db
+  
 
     def create(self, item: InventoryItemCreate) -> InventoryItem:
         db_item = InventoryItemModel(**item.model_dump())
