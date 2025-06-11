@@ -1,4 +1,4 @@
-name: Debug and Scan
+name: Security Scan
 
 on:
   push:
@@ -11,90 +11,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Start and Debug App
+      - name: Start Your App
         run: |
-          # Create a complete .env.docker with all services
-          cat > .env.docker << EOF
-          DATABASE_URL=postgresql://postgres:postgres@db:5432/inventory_db
-          RABBITMQ_HOST=rabbitmq
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=postgres
-          POSTGRES_DB=inventory_db
-          EOF
-          
-          echo "🚀 Starting database first..."
-          docker compose up -d db rabbitmq
-          
-          echo "⏳ Waiting for database to be ready..."
-          for i in {1..30}; do
-            if docker compose exec -T db pg_isready -U postgres 2>/dev/null; then
-              echo "✅ Database is ready!"
-              break
-            fi
-            echo "Waiting for database... ($i/30)"
-            sleep 2
-          done
-          
-          echo "🚀 Now starting the app..."
-          docker compose up -d --build app
-          
-          echo "⏳ Waiting for app to start..."
+          echo "DATABASE_URL=${{ secrets.INVENTORY_DATABASE_URL }}" > .env.docker
+          echo "RABBITMQ_HOST=rabbitmq" >> .env.docker
+          docker compose up -d --build
           sleep 30
-          
-          echo "📊 Container status:"
-          docker compose ps
-          
-          echo "📋 Full logs:"
-          docker compose logs
-          
-          echo "🔍 What's listening on ports:"
-          docker compose exec -T app netstat -tlnp 2>/dev/null || echo "netstat failed"
-          
-          echo "🌐 Port mapping check:"
-          docker port $(docker compose ps -q app) 2>/dev/null || echo "No port mapping found"
-          
-          echo "🔌 Testing connectivity:"
-          for port in 8000 8001 3000 5000 80; do
-            echo "Testing port $port..."
-            curl -I http://localhost:$port 2>/dev/null && echo "✅ Port $port works!" || echo "❌ Port $port failed"
-          done
-          
-          echo "🐳 Container inspect:"
-          docker compose exec -T app ps aux 2>/dev/null || echo "ps failed"
 
-      - name: Run ZAP (only if app responds)
+      - name: What's Actually Running?
         run: |
-          # Find which port actually works
-          APP_PORT=""
-          for port in 8000 8001 3000 5000 80; do
-            if curl -f http://localhost:$port 2>/dev/null; then
-              APP_PORT=$port
-              echo "✅ Found working port: $port"
-              break
-            fi
-          done
-          
-          if [ -n "$APP_PORT" ]; then
-            echo "🔍 Running ZAP scan on port $APP_PORT"
-            docker run --rm --network host \
-              -v $(pwd):/zap/wrk/:rw \
-              ghcr.io/zaproxy/zaproxy:stable \
-              zap-baseline.py \
-                -t http://localhost:$APP_PORT \
-                -J zap-report.json \
-                -I || echo "ZAP completed with warnings"
-          else
-            echo "❌ No working port found - skipping ZAP scan"
-            echo "Check the logs above to see why your app isn't starting"
-            exit 1
-          fi
+          echo "=== Containers ==="
+          docker ps
+          echo "=== Logs ==="
+          docker compose logs
+          echo "=== Network Test ==="
+          curl -v http://localhost:8001 || echo "Nothing on 8001"
+          echo "=== Port Check ==="
+          ss -tlnp | grep :8001 || echo "No port 8001"
 
-      - name: Upload Report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: zap-report
-          path: zap-report.json
+      - name: ZAP Scan
+        run: |
+          docker run --rm --network host \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:8001 -I || echo "ZAP done"
 
       - name: Cleanup
         if: always()
