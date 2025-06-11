@@ -13,12 +13,20 @@ jobs:
       
       - name: Start and Debug App
         run: |
-          echo "DATABASE_URL=${{ secrets.INVENTORY_DATABASE_URL }}" > .env.docker
-          echo "RABBITMQ_HOST=rabbitmq" >> .env.docker
+          # Create a complete .env.docker with all services
+          cat > .env.docker << EOF
+          DATABASE_URL=postgresql://postgres:postgres@db:5432/inventory_db
+          RABBITMQ_HOST=rabbitmq
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          POSTGRES_DB=inventory_db
+          EOF
           
-          echo "🚀 Starting containers..."
+          echo "🚀 Starting all services..."
           docker compose up -d --build
-          sleep 30
+          
+          echo "⏳ Waiting for services to be ready..."
+          sleep 45  # Give database time to start
           
           echo "📊 Container status:"
           docker compose ps
