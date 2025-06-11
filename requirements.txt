@@ -4,6 +4,7 @@ pytest
 pytest-cov
 python-multipart
 pytest-dotenv
+pytest-mock
 httpx
 sqlalchemy
 pika
