@@ -244,7 +244,7 @@ jobs:
 
       - name: Deploy monitoring stack
         run: |
-          docker-compose -f docker-compose.yml up -d
+          docker compose -f docker-compose.yml up -d
 
       - name: Wait for services to be ready
         run: |
@@ -270,5 +270,5 @@ jobs:
       - name: Cleanup on failure
         if: failure()
         run: |
-          docker-compose -f docker-compose.yml down -v
+          docker compose -f docker-compose.yml down -v
           docker system prune -f
