@@ -1,25 +1,42 @@
 services:
-  db:
+  inventory-db:
     image: postgres:14
+    container_name: inventory-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: inventory_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=inventory_db
     ports:
       - "5432:5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
     
   rabbitmq:
     image: rabbitmq:3-management
     ports:
       - "5672:5672"
       - "15672:15672"
+    networks:
+      - app_network
     
   app:
     build: .
     ports:
       - "8001:8001"
     depends_on:
-      - db
+      - inventory-db
       - rabbitmq
     env_file:
       - .env.docker
+    networks:
+      - app_network
+  
+networks:
+  app_network:
+    driver: bridge

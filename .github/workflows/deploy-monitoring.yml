@@ -1,0 +1,274 @@
+# .github/workflows/deploy-monitoring.yml
+name: Deploy Monitoring Stack
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy-monitoring:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create monitoring directories
+        run: |
+          mkdir -p monitoring/{prometheus,grafana/{dashboards,provisioning/{dashboards,datasources}}}
+
+      - name: Generate Prometheus configuration
+        run: |
+          cat > monitoring/prometheus/prometheus.yml << 'EOF'
+          global:
+            scrape_interval: 15s
+            evaluation_interval: 15s
+
+          rule_files:
+            - "rules/*.yml"
+
+          scrape_configs:
+            - job_name: 'prometheus'
+              static_configs:
+                - targets: ['localhost:9090']
+
+            - job_name: 'inventory-service'
+              static_configs:
+                - targets: ['inventory-service:8001']
+              metrics_path: '/metrics'
+              scrape_interval: 10s
+
+            - job_name: 'node-exporter'
+              static_configs:
+                - targets: ['node-exporter:9100']
+
+            - job_name: 'cadvisor'
+              static_configs:
+                - targets: ['cadvisor:8080']
+          EOF
+
+      - name: Generate Grafana datasource configuration
+        run: |
+          cat > monitoring/grafana/provisioning/datasources/prometheus.yml << 'EOF'
+          apiVersion: 1
+
+          datasources:
+            - name: Prometheus
+              type: prometheus
+              access: proxy
+              url: http://prometheus:9090
+              isDefault: true
+              editable: true
+          EOF
+
+      - name: Generate Grafana dashboard configuration
+        run: |
+          cat > monitoring/grafana/provisioning/dashboards/dashboard.yml << 'EOF'
+          apiVersion: 1
+
+          providers:
+            - name: 'default'
+              orgId: 1
+              folder: ''
+              type: file
+              disableDeletion: false
+              updateIntervalSeconds: 10
+              allowUiUpdates: true
+              options:
+                path: /etc/grafana/provisioning/dashboards
+          EOF
+
+      - name: Create FastAPI monitoring dashboard
+        run: |
+          cat > monitoring/grafana/dashboards/fastapi-dashboard.json << 'EOF'
+          {
+            "dashboard": {
+              "id": null,
+              "title": "FastAPI Inventory Service",
+              "tags": ["fastapi", "inventory"],
+              "timezone": "browser",
+              "panels": [
+                {
+                  "id": 1,
+                  "title": "Request Rate",
+                  "type": "graph",
+                  "targets": [
+                    {
+                      "expr": "rate(fastapi_requests_total[5m])",
+                      "legendFormat": "{{method}} {{handler}}"
+                    }
+                  ],
+                  "yAxes": [
+                    {
+                      "label": "Requests/sec"
+                    }
+                  ],
+                  "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+                },
+                {
+                  "id": 2,
+                  "title": "Response Time",
+                  "type": "graph",
+                  "targets": [
+                    {
+                      "expr": "histogram_quantile(0.95, rate(fastapi_request_duration_seconds_bucket[5m]))",
+                      "legendFormat": "95th percentile"
+                    }
+                  ],
+                  "yAxes": [
+                    {
+                      "label": "Seconds"
+                    }
+                  ],
+                  "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+                }
+              ],
+              "time": {"from": "now-1h", "to": "now"},
+              "refresh": "5s"
+            }
+          }
+          EOF
+
+      - name: Create Docker Compose for monitoring
+        run: |
+          cat > docker-compose.monitoring.yml << 'EOF'
+          version: '3.8'
+
+          services:
+            prometheus:
+              image: prom/prometheus:latest
+              container_name: prometheus
+              ports:
+                - "9090:9090"
+              volumes:
+                - ./monitoring/prometheus:/etc/prometheus
+                - prometheus_data:/prometheus
+              command:
+                - '--config.file=/etc/prometheus/prometheus.yml'
+                - '--storage.tsdb.path=/prometheus'
+                - '--web.console.libraries=/etc/prometheus/console_libraries'
+                - '--web.console.templates=/etc/prometheus/consoles'
+                - '--storage.tsdb.retention.time=200h'
+                - '--web.enable-lifecycle'
+              networks:
+                - monitoring
+
+            grafana:
+              image: grafana/grafana:latest
+              container_name: grafana
+              ports:
+                - "3000:3000"
+              volumes:
+                - grafana_data:/var/lib/grafana
+                - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+                - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+              environment:
+                - GF_SECURITY_ADMIN_PASSWORD=${{ secrets.GRAFANA_PASSWORD || 'admin123' }}
+                - GF_USERS_ALLOW_SIGN_UP=false
+                - GF_SECURITY_ADMIN_USER=admin
+              networks:
+                - monitoring
+
+            node-exporter:
+              image: prom/node-exporter:latest
+              container_name: node-exporter
+              ports:
+                - "9100:9100"
+              volumes:
+                - /proc:/host/proc:ro
+                - /sys:/host/sys:ro
+                - /:/rootfs:ro
+              command:
+                - '--path.procfs=/host/proc'
+                - '--path.rootfs=/rootfs'
+                - '--path.sysfs=/host/sys'
+                - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+              networks:
+                - monitoring
+
+            cadvisor:
+              image: gcr.io/cadvisor/cadvisor:latest
+              container_name: cadvisor
+              ports:
+                - "8080:8080"
+              volumes:
+                - /:/rootfs:ro
+                - /var/run:/var/run:rw
+                - /sys:/sys:ro
+                - /var/lib/docker/:/var/lib/docker:ro
+              networks:
+                - monitoring
+
+            inventory-service:
+              build:
+                context: .
+                dockerfile: Dockerfile
+              container_name: inventory-service
+              ports:
+                - "8001:8001"
+              environment:
+                - DATABASE_URL=${{ secrets.DATABASE_URL }}
+              networks:
+                - monitoring
+              depends_on:
+                - prometheus
+
+          volumes:
+            prometheus_data:
+            grafana_data:
+
+          networks:
+            monitoring:
+              driver: bridge
+          EOF
+
+      - name: Deploy monitoring stack
+        run: |
+          docker-compose -f docker-compose.monitoring.yml up -d
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for services to start..."
+          sleep 30
+          
+          # Check if Prometheus is ready
+          curl -f http://localhost:9090/-/ready || exit 1
+          
+          # Check if Grafana is ready
+          curl -f http://localhost:3000/api/health || exit 1
+          
+          echo "All services are ready!"
+
+      - name: Run health checks
+        run: |
+          # Test Prometheus targets
+          curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.health != "up") | .lastError' && exit 1 || echo "All Prometheus targets are healthy"
+          
+          # Test Grafana datasources
+          curl -s -u admin:${{ secrets.GRAFANA_PASSWORD || 'admin123' }} http://localhost:3000/api/datasources | jq '.[].url' | grep -q prometheus && echo "Grafana datasource configured successfully"
+
+      - name: Cleanup on failure
+        if: failure()
+        run: |
+          docker-compose -f docker-compose.monitoring.yml down -v
+          docker system prune -f
