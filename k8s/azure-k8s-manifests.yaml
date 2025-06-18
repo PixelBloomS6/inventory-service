@@ -8,12 +8,15 @@ metadata:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: db-secrets
+  name: db-secret
   namespace: pixelbloom-prod
 type: Opaque
 data:
-  postgres-user: Z3Vlc3Q=          # base64 for "guest"
-  postgres-password: Z3Vlc3Q=  
+  POSTGRES_HOST: aW52ZW50b3J5LWRi          # base64 for "inventory-db"
+  POSTGRES_USER: Z3Vlc3Q=                  # base64 for "guest"
+  POSTGRES_PASSWORD: Z3Vlc3Q=              # base64 for "guest"
+  POSTGRES_DB: aW52ZW50b3J5X2Ri            # base64 for "inventory_db"
+  POSTGRES_PORT: NTQzMg==                  # base64 for "5432"
 ---
 # ConfigMap for application configuration
 apiVersion: v1
@@ -25,6 +28,111 @@ data:
   ENVIRONMENT: "production"
   LOG_LEVEL: "INFO"
   DEBUG: "false"
+---
+# PersistentVolumeClaims
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inventory-db-storage-pvc
+  namespace: pixelbloom-prod
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inventory-uploads-pvc
+  namespace: pixelbloom-prod
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# PostgreSQL Database Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-db
+  namespace: pixelbloom-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventory-db
+  template:
+    metadata:
+      labels:
+        app: inventory-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          value: inventory_db
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: inventory-db-storage
+          mountPath: /var/lib/postgresql/data
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - guest
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - guest
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      volumes:
+      - name: inventory-db-storage
+        persistentVolumeClaim:
+          claimName: inventory-db-storage-pvc
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-db
+  namespace: pixelbloom-prod
+spec:
+  selector:
+    app: inventory-db
+  ports:
+  - port: 5432
+    targetPort: 5432
 ---
 # Inventory Service Deployment
 apiVersion: apps/v1
@@ -204,96 +312,3 @@ spec:
     targetPort: 8001
     protocol: TCP
   type: LoadBalancer
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: inventory-db-pvc
-  namespace: microservices-app
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 2Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: inventory-uploads-pvc
-  namespace: microservices-app
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: inventory-db
-  namespace: pixelbloom-prod
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: inventory-db
-  template:
-    metadata:
-      labels:
-        app: inventory-db
-    spec:
-      containers:
-      - name: postgres
-        image: postgres:14
-        env:
-        - name: POSTGRES_USER
-          valueFrom:
-            secretKeyRef:
-              name: db-secrets
-              key: postgres-user
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: db-secrets
-              key: postgres-password
-        - name: POSTGRES_DB
-          value: inventory_db
-        ports:
-        - containerPort: 5432
-        volumeMounts:
-        - name: inventory-db-storage
-          mountPath: /var/lib/postgresql/data
-        readinessProbe:
-          exec:
-            command:
-            - pg_isready
-            - -U
-            - postgres
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        livenessProbe:
-          exec:
-            command:
-            - pg_isready
-            - -U
-            - postgres
-          initialDelaySeconds: 30
-          periodSeconds: 10
-      volumes:
-      - name: inventory-db-storage
-        persistentVolumeClaim:
-          claimName: inventory-db-pvc
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: inventory-db
-  namespace: pixelbloom-prod
-spec:
-  selector:
-    app: inventory-db
-  ports:
-  - port: 5432
-    targetPort: 5432
