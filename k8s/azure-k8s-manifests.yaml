@@ -13,7 +13,7 @@ metadata:
   namespace: pixelbloom-prod
 type: Opaque
 data:
-  # echo -n "your-server-name.postgres.database.azure.com" | base64
+  # echo -n "pixelbloom-postgres-1750202966.postgres.database.azure.com" | base64
   POSTGRES_HOST: cGl4ZWxibG9vbS1wb3N0Z3Jlcy0xNzUwMjAyOTY2LnBvc3RncmVzLmRhdGFiYXNlLmF6dXJlLmNvbQ==
   # echo -n "postgres" | base64
   POSTGRES_USER: cG9zdGdyZXM=
@@ -21,6 +21,8 @@ data:
   POSTGRES_PASSWORD: WW91clNlY3VyZVBhc3N3b3JkMTIzIQ==
   # echo -n "inventory_db" | base64
   POSTGRES_DB: aW52ZW50b3J5X2Ri
+  # echo -n "5432" | base64
+  POSTGRES_PORT: NTQzMg==
 ---
 # ConfigMap for application configuration
 apiVersion: v1
@@ -29,9 +31,9 @@ metadata:
   name: app-config
   namespace: pixelbloom-prod
 data:
-  POSTGRES_PORT: "5432"
   ENVIRONMENT: "production"
   LOG_LEVEL: "INFO"
+  DEBUG: "false"
 ---
 # Inventory Service Deployment
 apiVersion: apps/v1
@@ -42,6 +44,7 @@ metadata:
   labels:
     app: inventory-service
 spec:
+  replicas: 2
   selector:
     matchLabels:
       app: inventory-service
@@ -56,9 +59,10 @@ spec:
     spec:
       containers:
       - name: inventory-service
-        image: pixelbloomacr1750202956.azurecr.io/inventory-service:latest  # Update with your ACR name
+        image: pixelbloomacr1750202956.azurecr.io/inventory-service:latest
         imagePullPolicy: Always
         env:
+        # Database connection variables
         - name: POSTGRES_HOST
           valueFrom:
             secretKeyRef:
@@ -81,11 +85,25 @@ spec:
               key: POSTGRES_DB
         - name: POSTGRES_PORT
           valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PORT
+        # Application configuration
+        - name: ENVIRONMENT
+          valueFrom:
             configMapKeyRef:
               name: app-config
-              key: POSTGRES_PORT
-        - name: DATABASE_URL
-          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)"
+              key: ENVIRONMENT
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: LOG_LEVEL
+        - name: DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DEBUG
         ports:
         - containerPort: 8001
           name: http
@@ -100,14 +118,27 @@ spec:
           httpGet:
             path: /health
             port: 8001
-          initialDelaySeconds: 10
-          periodSeconds: 5
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         livenessProbe:
           httpGet:
             path: /health
             port: 8001
           initialDelaySeconds: 30
-          periodSeconds: 10
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        # Add startup probe for better handling of slow starts
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 12
 ---
 # Service for Inventory Service
 apiVersion: v1
@@ -143,13 +174,13 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 25
+        averageUtilization: 70
   - type: Resource
     resource:
       name: memory
       target:
         type: Utilization
-        averageUtilization: 50
+        averageUtilization: 80
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 300
