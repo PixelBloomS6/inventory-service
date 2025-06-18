@@ -205,19 +205,29 @@ spec:
     protocol: TCP
   type: LoadBalancer
 ---
----
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: inventory-db-pvc
-  namespace: pixelbloom-prod
+  namespace: microservices-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inventory-uploads-pvc
+  namespace: microservices-app
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
       storage: 1Gi
-  storageClassName: default
 ---
 apiVersion: apps/v1
 kind: Deployment
