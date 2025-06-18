@@ -73,7 +73,7 @@ async def create_inventory_item(
         #     updated_item = inventory_service.update_item_images(created_item.id, images)
         #     return updated_item
         
-        # return created_item
+        return created_item
     
     except Exception as e:
         INVENTORY_OPERATIONS.labels(

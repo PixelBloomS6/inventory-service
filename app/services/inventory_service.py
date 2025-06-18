@@ -12,7 +12,7 @@ class InventoryService:
 
     def create_item(self, item: InventoryItemCreate) -> InventoryItem:
         created_item = self.repository.create(item)
-        
+        return created_item
         # Publish inventory item created event
         # self.publisher.publish_event(
         #     exchange="inventory_events",
@@ -24,8 +24,6 @@ class InventoryService:
         #         "name": created_item.name
         #     }
         # )
-        
-        return created_item
 
     def get_item(self, item_id: uuid.UUID) -> Optional[InventoryItem]:
         return self.repository.get_by_id(item_id)
