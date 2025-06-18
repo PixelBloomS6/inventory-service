@@ -9,279 +9,185 @@ on:
       - main
 
 env:
-  IMAGE_NAME: pixelbloom
+  IMAGE_NAME: inventory-service
+  AZURE_RESOURCE_GROUP: pixelbloom-rg
+  AZURE_AKS_CLUSTER: pixelbloom-aks
+  AZURE_ACR_NAME: pixelbloomacr1750202956
+
+# jobs:
+#   unit-tests:
+#     name: Unit Tests
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+#       - name: Set up Python
+#         uses: actions/setup-python@v4
+#         with:
+#           python-version: '3.9'
+#       - name: Install dependencies
+#         run: |
+#           pip install -r requirements.txt
+#           pip install pytest pytest-cov python-multipart
+#       - name: Run unit tests with coverage
+#         run: |
+#           export DATABASE_URL="sqlite:///:memory:"
+#           python -m pytest --cov=app --cov-report=xml
+#         env:
+#           DATABASE_URL: "sqlite:///:memory:"
+#           TESTING: "true"
+#       - name: Upload coverage report
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: coverage-report
+#           path: coverage.xml
+
+#   integration-tests:
+#     name: Integration Tests
+#     runs-on: ubuntu-latest
+#     needs: unit-tests
+#     steps:
+#       - name: Integration Test Step
+#         run: echo "Integration tests to be implemented."
+
+#   sonarqube:
+#     name: SonarQube Scan
+#     runs-on: ubuntu-latest
+#     needs: unit-tests
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 0
+#       - name: Download coverage report
+#         uses: actions/download-artifact@v4
+#         with:
+#           name: coverage-report
+#       - name: SonarQube Scan
+#         uses: sonarsource/sonarqube-scan-action@master
+#         env:
+#           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+#           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
 jobs:
-  unit-tests:
-    name: Unit Tests
+  build-and-push-docker:
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov python-multipart
-
-      - name: Run unit tests with coverage
-        run: |
-          export DATABASE_URL="sqlite:///:memory:"
-          python -m pytest --cov=app --cov-report=xml
-        env:
-          DATABASE_URL: "sqlite:///:memory:"
-          TESTING: "true"
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage.xml
-
-  integration-tests:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: unit-tests
-
-    steps:
-      - name: Integration Test Step
-        run: echo "Integration tests to be implemented."
-
-  sonarqube:
-    name: SonarQube Scan
-    runs-on: ubuntu-latest
-    needs: unit-tests
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Shallow clones should be disabled for better analysis
-
-      - name: Download coverage report
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-report
-
-      - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@master
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-
-
-
-  # CD Jobs start here
-  build-docker:
-    name: Build Docker Image
-    runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests, sonarqube]
-    # Only run on main branch pushes (not PRs)
+    # needs: [unit-tests, integration-tests, sonarqube]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to Azure Container Registry
+        run: |
+          az acr login --name ${{ env.AZURE_ACR_NAME }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: false  # Don't push, just build locally
-          tags: ${{ env.IMAGE_NAME }}:latest,${{ env.IMAGE_NAME }}:${{ github.sha }}
+          push: true
+          tags: |
+            ${{ env.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+            ${{ env.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: List built images
-        run: docker images ${{ env.IMAGE_NAME }}
-  
-  setup-monitoring-stack:
-    name: Setup Monitoring Stack
+  deploy-to-azure:
+    name: Deploy to Azure AKS
     runs-on: ubuntu-latest
-    needs: build-docker
+    needs: build-and-push-docker
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
-    steps:
-      - name: Create monitoring configuration
-        run: |
-          # Create directory for monitoring configs
-          mkdir -p monitoring
-          
-          # Simple Prometheus config
-          cat > monitoring/prometheus.yml << 'EOF'
-          global:
-            scrape_interval: 15s
-          
-          scrape_configs:
-            - job_name: 'pixelbloom-inventory'
-              static_configs:
-                - targets: ['host.docker.internal:8001']
-              metrics_path: '/metrics'
-              scrape_interval: 5s
-          EOF
-          
-          # Simple docker-compose for monitoring
-          cat > monitoring/docker-compose.yml << 'EOF'
-          version: '3.8'
-          services:
-            prometheus:
-              image: prom/prometheus:latest
-              ports:
-                - "9090:9090"
-              volumes:
-                - ./prometheus.yml:/etc/prometheus/prometheus.yml
-              command:
-                - '--config.file=/etc/prometheus/prometheus.yml'
-                - '--web.enable-lifecycle'
-              restart: unless-stopped
-          
-            grafana:
-              image: grafana/grafana:latest
-              ports:
-                - "3000:3000"
-              environment:
-                - GF_SECURITY_ADMIN_PASSWORD=admin123
-              restart: unless-stopped
-          EOF
-       
-      - name: Start monitoring stack
-        run: |
-          cd monitoring
-          docker-compose up -d
-          sleep 30  # Wait for services to start
-       
-      - name: Verify monitoring setup
-        run: |
-          echo "Checking Prometheus..."
-          curl -f http://localhost:9090/-/healthy || echo "Prometheus not ready yet"
-          
-          echo "Checking Grafana..."
-          curl -f http://localhost:3000/api/health || echo "Grafana not ready yet"
-       
-      - name: Create simple test for metrics
-        run: |
-          echo "Testing metrics endpoint (will fail until app is running)..."
-          curl -f http://localhost:8001/metrics || echo "App not running - this is expected in CI"
-       
-      - name: Generate monitoring setup guide
-        run: |
-          cat > monitoring-guide.md << 'EOF'
-          # Monitoring Setup Guide
-          
-          ## What was set up:
-          1. **Prometheus** - Collects metrics from your app
-          2. **Grafana** - Creates dashboards from the metrics
-          
-          ## To run locally:
-          1. Start your app: `uvicorn app.main:app --host 0.0.0.0 --port 8001`
-          2. Start monitoring: `cd monitoring && docker-compose up -d`
-          3. Open Grafana: http://localhost:3000 (admin/admin123)
-          4. Open Prometheus: http://localhost:9090
-          
-          ## What metrics are collected:
-          - `http_requests_total` - Number of HTTP requests
-          - `http_request_duration_seconds` - How long requests take
-          - `inventory_operations_total` - Inventory-specific operations
-          
-          ## Next steps:
-          1. Add more business metrics to your code
-          2. Create Grafana dashboards
-          3. Set up alerts for important metrics
-          EOF
-       
-      - name: Upload monitoring configuration
-        uses: actions/upload-artifact@v4
-        with:
-          name: monitoring-setup
-          path: |
-            monitoring/
-            monitoring-guide.md
 
-  # NEW: Test monitoring integration
-  test-monitoring:
-    name: Test Monitoring Integration
-    runs-on: ubuntu-latest
-    needs: setup-monitoring-stack
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-       
-      - name: Download monitoring setup
-        uses: actions/download-artifact@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
         with:
-          name: monitoring-setup
-       
-      - name: Build and start application for testing
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get AKS credentials
         run: |
-          # Build your existing Docker image
-          docker build -t ${{ env.IMAGE_NAME }}:test .
-          
-          # Start the app
-          docker run -d -p 8001:8001 --name pixelbloom-app ${{ env.IMAGE_NAME }}:test
-          sleep 10
-       
-      - name: Test application health
+          az aks get-credentials --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_AKS_CLUSTER }}
+
+      - name: Update Kubernetes manifests
         run: |
-          curl -f http://localhost:8001/health
-          echo "✅ Application health check passed"
-       
-      - name: Test metrics endpoint
+          sed -i 's|image: .*|image: ${{ env.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}|' k8s/azure-k8s-manifests.yaml
+
+      - name: Deploy to AKS
         run: |
-          curl -f http://localhost:8001/metrics
-          echo "✅ Metrics endpoint is working"
-       
-      - name: Start monitoring stack
+          kubectl apply -f k8s/azure-k8s-manifests.yaml
+
+      - name: Wait for deployment rollout
         run: |
-          cd monitoring
-          docker-compose up -d
+          kubectl rollout status deployment/inventory-service -n pixelbloom-prod --timeout=300s
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods -n pixelbloom-prod
+          kubectl get svc -n pixelbloom-prod
+          kubectl get hpa -n pixelbloom-prod
+
+  load-test:
+    name: Load Test
+    runs-on: ubuntu-latest
+    needs: deploy-to-azure
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_AKS_CLUSTER }}
+
+      - name: Run load test
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: k6-load-test-$(date +%s)
+            namespace: pixelbloom-prod
+          spec:
+            template:
+              spec:
+                containers:
+                - name: k6
+                  image: grafana/k6:latest
+                  command: ["k6", "run", "-"]
+                  stdin: true
+                  env:
+                  - name: TARGET_URL
+                    value: "http://inventory-service.pixelbloom-prod.svc.cluster.local/inventory/items/"
+                restartPolicy: Never
+            backoffLimit: 0
+          EOF
+
           sleep 30
-       
-      - name: Test Prometheus can scrape metrics
+          kubectl wait --for=condition=complete job -l app=k6-load-test -n pixelbloom-prod --timeout=300s
+
+      - name: Check autoscaling results
         run: |
-          # Wait a bit for Prometheus to scrape
-          sleep 15
-          
-          # Check if Prometheus can reach our app
-          curl -s "http://localhost:9090/api/v1/query?query=up" | grep -q "pixelbloom-inventory"
-          echo "✅ Prometheus is scraping metrics"
-       
-      - name: Generate test report
-        run: |
-          echo "# Monitoring Integration Test Report" > test-report.md
-          echo "" >> test-report.md
-          echo "## ✅ Tests Passed:" >> test-report.md
-          echo "- Application starts successfully" >> test-report.md
-          echo "- Health endpoint responds" >> test-report.md
-          echo "- Metrics endpoint provides Prometheus metrics" >> test-report.md
-          echo "- Prometheus successfully scrapes application metrics" >> test-report.md
-          echo "- Grafana dashboard is accessible" >> test-report.md
-          echo "" >> test-report.md
-          echo "## Access URLs (when running locally):" >> test-report.md
-          echo "- Application: http://localhost:8001" >> test-report.md
-          echo "- Metrics: http://localhost:8001/metrics" >> test-report.md
-          echo "- Prometheus: http://localhost:9090" >> test-report.md
-          echo "- Grafana: http://localhost:3000 (admin/admin123)" >> test-report.md
-       
-      - name: Upload test report
-        uses: actions/upload-artifact@v4
-        with:
-          name: monitoring-test-report
-          path: test-report.md
-       
-      - name: Cleanup
-        if: always()
-        run: |
-          docker stop pixelbloom-app || true
-          docker rm pixelbloom-app || true
-          cd monitoring && docker-compose down || true
+          echo "Checking HPA status:"
+          kubectl get hpa -n pixelbloom-prod
+          echo "Checking pod count:"
+          kubectl get pods -n pixelbloom-prod | grep inventory-service

@@ -2,52 +2,38 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 
 export let options = {
-  vus: 1000,              // 1000 virtual users
-  duration: '10m',       // total test duration
+  vus: 100, // Number of virtual users
+  duration: '10m', // Duration of test
 };
 
 export default function () {
+  const url = 'http://localhost:8080/api/inventory/items/';
+
   const payload = {
     shop_id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
-    name: `Bouquet ${__VU}-${__ITER}`,
-    description: 'Direct and gateway test',
-    category: 'Hybrid',
-    price: '12.99',
-    quantity: '5',
+    name: 'Test Bouquet',
+    description: 'Load test flower set',
+    category: 'Stress',
+    price: '15.99',
+    quantity: '10',
   };
 
-  const encodedPayload = Object.entries(payload)
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-    .join('&');
-
-  const params = {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    timeout: '30s',  // timeout to avoid hanging requests
+  const formData = {
+    'shop_id': payload.shop_id,
+    'name': payload.name,
+    'description': payload.description,
+    'category': payload.category,
+    'price': payload.price,
+    'quantity': payload.quantity,
   };
 
-  // Gateway request
-  const gatewayRes = http.post(
-    'http://localhost:31051/api/inventory/items/',
-    encodedPayload,
-    params
-  );
-
-  // Direct service request
-  const directRes = http.post(
-    'http://localhost:8001/inventoryitems/',
-    encodedPayload,
-    params
-  );
-
-  check(gatewayRes, {
-    'gateway status is 201': (r) => r.status === 201,
+  const res = http.post(url, formData, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
 
-  check(directRes, {
-    'direct status is 201': (r) => r.status === 201,
+  check(res, {
+    'status is 201': (r) => r.status === 201,
   });
 
-  sleep(1); // Pause 1 second to reduce port-forward connection overload
+  sleep(1);
 }

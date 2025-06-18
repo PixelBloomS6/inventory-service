@@ -1,0 +1,184 @@
+# azure-k8s-manifests.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pixelbloom-prod
+---
+# Secrets for database connection
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: pixelbloom-prod
+type: Opaque
+data:
+  # echo -n "your-server-name.postgres.database.azure.com" | base64
+  POSTGRES_HOST: cGl4ZWxibG9vbS1wb3N0Z3Jlcy0xNzUwMjAyOTY2LnBvc3RncmVzLmRhdGFiYXNlLmF6dXJlLmNvbQ==
+  # echo -n "postgres" | base64
+  POSTGRES_USER: cG9zdGdyZXM=
+  # echo -n "YourSecurePassword123!" | base64
+  POSTGRES_PASSWORD: WW91clNlY3VyZVBhc3N3b3JkMTIzIQ==
+  # echo -n "inventory_db" | base64
+  POSTGRES_DB: aW52ZW50b3J5X2Ri
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: pixelbloom-prod
+data:
+  POSTGRES_PORT: "5432"
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+---
+# Inventory Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-service
+  namespace: pixelbloom-prod
+  labels:
+    app: inventory-service
+spec:
+  selector:
+    matchLabels:
+      app: inventory-service
+  template:
+    metadata:
+      labels:
+        app: inventory-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8001"
+    spec:
+      containers:
+      - name: inventory-service
+        image: pixelbloomacr1750202956.azurecr.io/inventory-service:latest  # Update with your ACR name
+        imagePullPolicy: Always
+        env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_HOST
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_DB
+        - name: POSTGRES_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: POSTGRES_PORT
+        - name: DATABASE_URL
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)"
+        ports:
+        - containerPort: 8001
+          name: http
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+# Service for Inventory Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-service
+  namespace: pixelbloom-prod
+spec:
+  selector:
+    app: inventory-service
+  ports:
+  - port: 80
+    targetPort: 8001
+    protocol: TCP
+  type: ClusterIP
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: inventory-service-hpa
+  namespace: pixelbloom-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: inventory-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 25
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 50
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
+---
+# Load Balancer Service (optional - for external access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-service-lb
+  namespace: pixelbloom-prod
+spec:
+  selector:
+    app: inventory-service
+  ports:
+  - port: 80
+    targetPort: 8001
+    protocol: TCP
+  type: LoadBalancer
