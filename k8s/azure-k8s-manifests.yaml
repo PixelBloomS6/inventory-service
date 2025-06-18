@@ -12,7 +12,7 @@ metadata:
   namespace: pixelbloom-prod
 type: Opaque
 data:
-  POSTGRES_HOST: aW52ZW50b3J5LWRi          # base64 for "inventory-db"
+  POSTGRES_HOST: aW52ZW50b3J5LWRi          # base64 for "inventory-db" (correct service name)
   POSTGRES_USER: Z3Vlc3Q=                  # base64 for "guest"
   POSTGRES_PASSWORD: Z3Vlc3Q=              # base64 for "guest"
   POSTGRES_DB: aW52ZW50b3J5X2Ri            # base64 for "inventory_db"
