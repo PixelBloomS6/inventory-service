@@ -11,26 +11,26 @@ from sqlalchemy import create_engine
 from dotenv import load_dotenv
 from ..db.database import SQLALCHEMY_DATABASE_URL
 from ..services.inventory_service import InventoryService
-# from ..messaging.publisher import RabbitMQPublisher
+from ..messaging.publisher import RabbitMQPublisher
 
 class InventoryConsumer:
     def __init__(self):
-        # load_dotenv()
+        load_dotenv()
         
-        # self.rabbitmq_host = os.getenv("RABBITMQ_HOST", "rabbitmq")
-        # self.rabbitmq_port = int(os.getenv("RABBITMQ_PORT", "5672"))
-        # self.rabbitmq_user = os.getenv("RABBITMQ_USER", "guest")
-        # self.rabbitmq_password = os.getenv("RABBITMQ_PASSWORD", "guest")
+        self.rabbitmq_host = os.getenv("RABBITMQ_HOST", "rabbitmq")
+        self.rabbitmq_port = int(os.getenv("RABBITMQ_PORT", "5672"))
+        self.rabbitmq_user = os.getenv("RABBITMQ_USER", "guest")
+        self.rabbitmq_password = os.getenv("RABBITMQ_PASSWORD", "guest")
         
-        # # Database setup
-        # self.engine = create_engine(SQLALCHEMY_DATABASE_URL)
-        # self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        # Database setup
+        self.engine = create_engine(SQLALCHEMY_DATABASE_URL)
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         
-        # self.connection = None
-        # self.channel = None
-        # self.publisher = RabbitMQPublisher()
+        self.connection = None
+        self.channel = None
+        self.publisher = RabbitMQPublisher()
         
-        # self._setup_connection()
+        self._setup_connection()
         pass
     
 #     def _setup_connection(self):
