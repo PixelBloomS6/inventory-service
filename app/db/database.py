@@ -10,7 +10,7 @@ load_dotenv()
 # Database configuration from environment variables
 POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "inventory_db")  # 'db' is typical in Docker Compose
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "db")  # 'db' is typical in Docker Compose
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "inventory_db")
 
