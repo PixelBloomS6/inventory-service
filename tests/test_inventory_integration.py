@@ -7,6 +7,15 @@ from fastapi.testclient import TestClient
 import os
 from urllib.parse import urlparse
 
+# Set test environment variables before importing app modules
+os.environ["TESTING"] = "true"
+# Set dummy values to prevent connection attempts during import
+os.environ["POSTGRES_HOST"] = "localhost"
+os.environ["POSTGRES_PORT"] = "5432"
+os.environ["POSTGRES_USER"] = "test"
+os.environ["POSTGRES_PASSWORD"] = "test"
+os.environ["POSTGRES_DB"] = "test"
+
 from app.main import app  # Adjust if your FastAPI app is elsewhere
 from app.db.database import Base, get_db
 
@@ -23,6 +32,11 @@ def test_db():
         os.environ["POSTGRES_USER"] = parsed_url.username
         os.environ["POSTGRES_PASSWORD"] = parsed_url.password
         os.environ["POSTGRES_DB"] = parsed_url.path.lstrip('/')
+        
+        # Force reload the database module to pick up new environment variables
+        import importlib
+        from app.db import database
+        importlib.reload(database)
         
         # Create engine with the testcontainer URL
         engine = create_engine(connection_url)
