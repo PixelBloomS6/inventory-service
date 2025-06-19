@@ -12,7 +12,7 @@ metadata:
   namespace: pixelbloom-prod
 type: Opaque
 data:
-  POSTGRES_HOST: aW52ZW50b3J5X2Ri          # base64 for "inventory_db" (matches your code default)
+  POSTGRES_HOST: aW52ZW50b3J5LWRi          # base64 for "inventory-db"
   POSTGRES_USER: Z3Vlc3Q=                  # base64 for "guest"
   POSTGRES_PASSWORD: Z3Vlc3Q=              # base64 for "guest"
   POSTGRES_DB: aW52ZW50b3J5X2Ri            # base64 for "inventory_db"
@@ -121,11 +121,11 @@ spec:
         persistentVolumeClaim:
           claimName: inventory-db-storage-pvc
 ---
-# PostgreSQL Service - Updated name to match your code expectation
+# PostgreSQL Service
 apiVersion: v1
 kind: Service
 metadata:
-  name: inventory_db  # Changed from inventory-db to inventory_db
+  name: inventory-db
   namespace: pixelbloom-prod
 spec:
   selector:
@@ -249,10 +249,10 @@ spec:
   selector:
     app: inventory-service
   ports:
-  - port: 80
+  - port: 8001
     targetPort: 8001
     protocol: TCP
-  type: ClusterIP
+  type: LoadBalancer
 ---
 # Horizontal Pod Autoscaler
 apiVersion: autoscaling/v2
