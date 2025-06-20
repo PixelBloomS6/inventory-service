@@ -91,24 +91,24 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: inventory_db
 
-#   sonarqube:
-#     name: SonarQube Scan
-#     runs-on: ubuntu-latest
-#     needs: unit-tests
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
-#         with:
-#           fetch-depth: 0
-#       - name: Download coverage report
-#         uses: actions/download-artifact@v4
-#         with:
-#           name: coverage-report
-#       - name: SonarQube Scan
-#         uses: sonarsource/sonarqube-scan-action@master
-#         env:
-#           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+  sonarqube:
+    name: SonarQube Scan
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
 # jobs:
 #   build-and-push-docker:
