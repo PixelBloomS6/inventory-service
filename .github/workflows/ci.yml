@@ -42,7 +42,7 @@ jobs:
           name: coverage-report
           path: coverage.xml
 
-integration-tests:
+  integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
     
