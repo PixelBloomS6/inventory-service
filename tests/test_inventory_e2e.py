@@ -21,6 +21,7 @@ def test_env():
 
         # Setup Postgres
         db_url = pg.get_connection_url()
+        os.environ["DATABASE_URL"] = db_url
         engine = create_engine(db_url)
         TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
