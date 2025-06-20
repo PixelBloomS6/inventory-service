@@ -48,7 +48,8 @@ jobs:
           docker run --rm \
             --network zap-net \
             -v $(pwd):/zap/wrk:rw \
-            owasp/zap2docker-stable zap-baseline.py \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
             -t http://pixelbloom-app:8001 \
             -g gen.conf \
             -r zap_report.html
