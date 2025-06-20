@@ -18,21 +18,51 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: inventory_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+      
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pytest testcontainers[postgresql] python-multipart
+      
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+      
       - name: Run integration tests
-        run: pytest tests/test_inventory_integration.py
+        run: pytest tests/test_inventory_integration.py -v
         env:
           TESTING: "true"
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: inventory_db
 
 
 # name: CI/CD Pipeline

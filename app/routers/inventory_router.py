@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -72,7 +73,7 @@ async def create_inventory_item(
         #     item_update = InventoryItemUpdate()
         #     updated_item = inventory_service.update_item_images(created_item.id, images)
         #     return updated_item
-        ß
+        
         return created_item
     
     except Exception as e:
@@ -82,6 +83,91 @@ async def create_inventory_item(
             status="error"
         ).inc()
         raise HTTPException(status_code=500, detail=str(e))
+
+# from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+# from sqlalchemy.orm import Session
+# from typing import List, Optional
+# import uuid
+# import json
+# from prometheus_client import Counter
+# from ..db.database import get_db
+# from ..models.domain.inventory import InventoryItem, InventoryItemCreate, InventoryItemUpdate
+# from ..services.inventory_service import InventoryService
+# from prometheus_client import Gauge
+
+# router = APIRouter(
+#     prefix="/inventory",
+#     tags=["inventory"],
+#     responses={404: {"description": "Not found"}},
+# )
+
+# # Metrics specific to inventory operations
+# INVENTORY_OPERATIONS = Counter(
+#     'inventory_operations_total',
+#     'Total inventory operations',
+#     ['operation', 'shop_id', 'status']
+# )
+
+# INVENTORY_ITEMS_BY_CATEGORY = Gauge(
+#     'inventory_items_by_category',
+#     'Number of items by category',
+#     ['category', 'shop_id']
+# )
+
+
+# @router.post("/items/", response_model=InventoryItem, status_code=status.HTTP_201_CREATED)
+# async def create_inventory_item(
+#     shop_id: uuid.UUID = Form(...),
+#     name: str = Form(...),
+#     description: str = Form(...),
+#     category: str = Form(...),
+#     price: float = Form(...),
+#     quantity: int = Form(...),
+#     images: List[UploadFile] = File(None),
+#     db: Session = Depends(get_db),
+# ):
+#     """Create inventory item with metrics tracking"""
+#     try:
+#         # Create inventory item
+#         item_data = InventoryItemCreate(
+#             shop_id=shop_id,
+#             name=name,
+#             description=description,
+#             category=category,
+#             price=price,
+#             quantity=quantity
+#         )
+        
+#         inventory_service = InventoryService(db)
+#         created_item = inventory_service.create_item(item_data)
+        
+#         # Update metrics
+#         INVENTORY_OPERATIONS.labels(
+#             operation="create",
+#             shop_id=str(shop_id),
+#             status="success"
+#         ).inc()
+        
+#         INVENTORY_ITEMS_BY_CATEGORY.labels(
+#             category=category,
+#             shop_id=str(shop_id)
+#         ).inc()
+        
+#         # Handle images if provided
+#         # if images:
+#         #     item_update = InventoryItemUpdate()
+#         #     updated_item = inventory_service.update_item_images(created_item.id, images)
+#         #     return updated_item
+#         ß
+#         return created_item
+    
+#     except Exception as e:
+#         INVENTORY_OPERATIONS.labels(
+#             operation="create",
+#             shop_id=str(shop_id),
+#             status="error"
+#         ).inc()
+#         raise HTTPException(status_code=500, detail=str(e))
 
 # Get all inventory items for a specific shop
 # @router.get("/shop/{shop_id}", response_model=List[InventoryItem])
