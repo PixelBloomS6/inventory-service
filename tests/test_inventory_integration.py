@@ -22,46 +22,30 @@ from app.db.database import Base, get_db
 @pytest.fixture(scope="module")
 def test_db():
     with PostgresContainer("postgres:15") as postgres:
-        # Get the connection URL from testcontainer and parse it
+        # Get dynamic test DB URL
         connection_url = postgres.get_connection_url()
-        parsed_url = urlparse(connection_url)
-        
-        # Override the individual PostgreSQL environment variables
-        os.environ["POSTGRES_HOST"] = parsed_url.hostname
-        os.environ["POSTGRES_PORT"] = str(parsed_url.port)
-        os.environ["POSTGRES_USER"] = parsed_url.username
-        os.environ["POSTGRES_PASSWORD"] = parsed_url.password
-        os.environ["POSTGRES_DB"] = parsed_url.path.lstrip('/')
-        
-        # Force reload the database module to pick up new environment variables
-        import importlib
+
+        # Override global SQLAlchemy engine dynamically
         from app.db import database
-        importlib.reload(database)
-        
-        # Create engine with the testcontainer URL
-        engine = create_engine(connection_url)
-        TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        database.engine = create_engine(connection_url)
+        database.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=database.engine)
 
-        # Create tables
-        Base.metadata.create_all(bind=engine)
+        # Create test tables
+        database.Base.metadata.create_all(bind=database.engine)
 
-        # Dependency override
+        # Dependency override for get_db
         def override_get_db():
-            db = TestingSessionLocal()
+            db = database.SessionLocal()
             try:
                 yield db
             finally:
                 db.close()
 
         app.dependency_overrides[get_db] = override_get_db
-        
-        # Create test client
         client = TestClient(app)
         yield client
-        
-        # Cleanup
-        app.dependency_overrides.clear()
 
+        app.dependency_overrides.clear()
 def test_create_inventory_item(test_db):
     response = test_db.post(
         "/inventory/items/",
