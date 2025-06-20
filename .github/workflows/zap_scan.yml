@@ -1,40 +1,52 @@
-name: Security Scan
+name: Build and Scan with OWASP ZAP
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
-  scan:
+  zap_scan:
     runs-on: ubuntu-latest
-    
+    services:
+      app:
+        image: your-image-name:latest
+        build:
+          context: .
+        ports:
+          - 8001:8001  # your app port
+        options: >-
+          --health-cmd="curl --fail http://localhost:8001/health || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Start Your App
-        run: |
-          echo "DATABASE_URL=${{ secrets.INVENTORY_DATABASE_URL }}" > .env.docker
-          echo "RABBITMQ_HOST=rabbitmq" >> .env.docker
-          docker compose up -d --build
-          sleep 30
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: What's Actually Running?
+      - name: Build OWASP ZAP container
         run: |
-          echo "=== Containers ==="
-          docker ps
-          echo "=== Logs ==="
-          docker compose logs
-          echo "=== Network Test ==="
-          curl -v http://localhost:8001 || echo "Nothing on 8001"
-          echo "=== Port Check ==="
-          ss -tlnp | grep :8001 || echo "No port 8001"
+          docker pull owasp/zap2docker-stable
 
-      - name: ZAP Scan
+      - name: Wait for App to be ready
         run: |
-          docker run --rm --network host \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://localhost:8001 -I || echo "ZAP done"
+          echo "Waiting for app container to be healthy..."
+          for i in {1..20}; do
+            curl -s http://localhost:8001/health && break
+            sleep 5
+          done
 
-      - name: Cleanup
-        if: always()
-        run: docker compose down
+      - name: Run ZAP Scan
+        run: |
+          docker run --rm \
+            --network host \
+            owasp/zap2docker-stable zap-baseline.py \
+            -t http://localhost:8001 \
+            -g gen.conf -r zap_report.html
+
+      - name: Upload ZAP report
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: zap_report.html
