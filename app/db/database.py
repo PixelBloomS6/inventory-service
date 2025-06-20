@@ -31,26 +31,36 @@
 #         db.close()
 
 # app/db/database.py
-import os
+# app/db/database.py
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, declarative_base
+import os
+from dotenv import load_dotenv
 
-DATABASE_URL = os.getenv("DATABASE_URL") or (
-    f"postgresql://{os.getenv('POSTGRES_USER', 'postgres')}:"
-    f"{os.getenv('POSTGRES_PASSWORD', 'postgres')}@"
-    f"{os.getenv('POSTGRES_HOST', 'localhost')}:"
-    f"{os.getenv('POSTGRES_PORT', '5432')}/"
-    f"{os.getenv('POSTGRES_DB', 'postgres')}"
-)
+load_dotenv()
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+def get_database_url():
+    POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+    POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+    POSTGRES_DB = os.getenv("POSTGRES_DB", "inventory_db")
+    return f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+
+def get_engine():
+    return create_engine(get_database_url())
+
+def get_session_local():
+    return sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
+
 def get_db():
+    SessionLocal = get_session_local()
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
