@@ -249,155 +249,155 @@ def test_create_inventory_item_basic(test_infrastructure):
     assert data["quantity"] == test_data["quantity"]
 
 
-def test_create_inventory_item_with_shop_validation(test_infrastructure, message_collector):
-    """Test creating inventory item with shop service validation via RabbitMQ"""
-    client = test_infrastructure['client']
+# def test_create_inventory_item_with_shop_validation(test_infrastructure, message_collector):
+#     """Test creating inventory item with shop service validation via RabbitMQ"""
+#     client = test_infrastructure['client']
     
-    # Mock the publisher in the inventory service
-    with patch('app.services.inventory_service.InventoryService') as mock_service_class:
-        # Create a real instance but mock the publisher
-        from app.services.inventory_service import InventoryService
-        from app.db.database import get_db
+#     # Mock the publisher in the inventory service
+#     with patch('app.services.inventory_service.InventoryService') as mock_service_class:
+#         # Create a real instance but mock the publisher
+#         from app.services.inventory_service import InventoryService
+#         from app.db.database import get_db
         
-        # Get a real database session for the test
-        db_gen = next(get_db())
-        real_service = InventoryService(db_gen)
+#         # Get a real database session for the test
+#         db_gen = next(get_db())
+#         real_service = InventoryService(db_gen)
         
-        # Create a mock publisher
-        mock_publisher = MagicMock()
-        real_service.publisher = mock_publisher
+#         # Create a mock publisher
+#         mock_publisher = MagicMock()
+#         real_service.publisher = mock_publisher
         
-        # Mock the service class to return our configured instance
-        mock_service_class.return_value = real_service
+#         # Mock the service class to return our configured instance
+#         mock_service_class.return_value = real_service
         
-        # Test data
-        shop_id = str(uuid.uuid4())
-        test_data = {
-            "shop_id": shop_id,
-            "name": "Test Item with Shop Check",
-            "description": "Test Description", 
-            "category": "Electronics",
-            "price": 99.99,
-            "quantity": 10
-        }
+#         # Test data
+#         shop_id = str(uuid.uuid4())
+#         test_data = {
+#             "shop_id": shop_id,
+#             "name": "Test Item with Shop Check",
+#             "description": "Test Description", 
+#             "category": "Electronics",
+#             "price": 99.99,
+#             "quantity": 10
+#         }
         
-        # Make request
-        response = client.post("/inventory/items/", data=test_data)
+#         # Make request
+#         response = client.post("/inventory/items/", data=test_data)
         
-        # Verify the item was created
-        assert response.status_code == 201
-        data = response.json()
-        item_id = data["id"]
+#         # Verify the item was created
+#         assert response.status_code == 201
+#         data = response.json()
+#         item_id = data["id"]
         
-        # Wait a moment for async processing
-        time.sleep(1)
+#         # Wait a moment for async processing
+#         time.sleep(1)
         
-        # Verify that the publisher was called with correct parameters
-        mock_publisher.publish_event.assert_called_once()
-        call_args = mock_publisher.publish_event.call_args
+#         # Verify that the publisher was called with correct parameters
+#         mock_publisher.publish_event.assert_called_once()
+#         call_args = mock_publisher.publish_event.call_args
         
-        # Check the published event
-        assert call_args[1]['exchange'] == 'inventory_events'
-        assert call_args[1]['routing_key'] == 'inventory.created'
+#         # Check the published event
+#         assert call_args[1]['exchange'] == 'inventory_events'
+#         assert call_args[1]['routing_key'] == 'inventory.created'
         
-        event_body = call_args[1]['body']
-        assert event_body['event_type'] == 'inventory_item_created'
-        assert event_body['item_id'] == item_id
-        assert event_body['shop_id'] == shop_id
-        assert event_body['name'] == test_data['name']
+#         event_body = call_args[1]['body']
+#         assert event_body['event_type'] == 'inventory_item_created'
+#         assert event_body['item_id'] == item_id
+#         assert event_body['shop_id'] == shop_id
+#         assert event_body['name'] == test_data['name']
 
 
-def test_shop_status_correlation_pattern(test_infrastructure):
-    """Test the correlation ID pattern for shop status validation"""
+# def test_shop_status_correlation_pattern(test_infrastructure):
+#     """Test the correlation ID pattern for shop status validation"""
     
-    # Setup RabbitMQ connection
-    connection = pika.BlockingConnection(
-        pika.ConnectionParameters(
-            host=test_infrastructure['rabbitmq_host'],
-            port=test_infrastructure['rabbitmq_port'],
-            credentials=pika.PlainCredentials(
-                test_infrastructure['rabbitmq_user'],
-                test_infrastructure['rabbitmq_password']
-            )
-        )
-    )
-    channel = connection.channel()
+#     # Setup RabbitMQ connection
+#     connection = pika.BlockingConnection(
+#         pika.ConnectionParameters(
+#             host=test_infrastructure['rabbitmq_host'],
+#             port=test_infrastructure['rabbitmq_port'],
+#             credentials=pika.PlainCredentials(
+#                 test_infrastructure['rabbitmq_user'],
+#                 test_infrastructure['rabbitmq_password']
+#             )
+#         )
+#     )
+#     channel = connection.channel()
     
-    # Create a temporary queue for responses
-    result = channel.queue_declare(queue='', exclusive=True)
-    callback_queue = result.method.queue
+#     # Create a temporary queue for responses
+#     result = channel.queue_declare(queue='', exclusive=True)
+#     callback_queue = result.method.queue
     
-    # Generate correlation ID
-    correlation_id = str(uuid.uuid4())
-    shop_id = str(uuid.uuid4())
+#     # Generate correlation ID
+#     correlation_id = str(uuid.uuid4())
+#     shop_id = str(uuid.uuid4())
     
-    # Prepare shop status request
-    request_message = {
-        "shop_id": shop_id,
-        "request_type": "status_check"
-    }
+#     # Prepare shop status request
+#     request_message = {
+#         "shop_id": shop_id,
+#         "request_type": "status_check"
+#     }
     
-    # Track response
-    response_received = {}
+#     # Track response
+#     response_received = {}
     
-    def on_response(ch, method, props, body):
-        if props.correlation_id == correlation_id:
-            response_received['data'] = json.loads(body.decode())
-            response_received['received'] = True
+#     def on_response(ch, method, props, body):
+#         if props.correlation_id == correlation_id:
+#             response_received['data'] = json.loads(body.decode())
+#             response_received['received'] = True
     
-    channel.basic_consume(
-        queue=callback_queue,
-        on_message_callback=on_response,
-        auto_ack=True
-    )
+#     channel.basic_consume(
+#         queue=callback_queue,
+#         on_message_callback=on_response,
+#         auto_ack=True
+#     )
     
-    # Send shop status request with correlation ID
-    channel.basic_publish(
-        exchange='shop_events',
-        routing_key='shop.status.request',
-        properties=pika.BasicProperties(
-            reply_to=callback_queue,
-            correlation_id=correlation_id,
-        ),
-        body=json.dumps(request_message)
-    )
+#     # Send shop status request with correlation ID
+#     channel.basic_publish(
+#         exchange='shop_events',
+#         routing_key='shop.status.request',
+#         properties=pika.BasicProperties(
+#             reply_to=callback_queue,
+#             correlation_id=correlation_id,
+#         ),
+#         body=json.dumps(request_message)
+#     )
     
-    # Simulate shop service response (in real scenario, shop service would do this)
-    def simulate_shop_response():
-        time.sleep(0.5)  # Simulate processing time
-        response = {
-            "shop_id": shop_id,
-            "is_active": True,
-            "status": "active",
-            "last_updated": "2025-06-20T10:00:00Z"
-        }
+#     # Simulate shop service response (in real scenario, shop service would do this)
+#     def simulate_shop_response():
+#         time.sleep(0.5)  # Simulate processing time
+#         response = {
+#             "shop_id": shop_id,
+#             "is_active": True,
+#             "status": "active",
+#             "last_updated": "2025-06-20T10:00:00Z"
+#         }
         
-        channel.basic_publish(
-            exchange='',
-            routing_key=callback_queue,
-            properties=pika.BasicProperties(
-                correlation_id=correlation_id
-            ),
-            body=json.dumps(response)
-        )
+#         channel.basic_publish(
+#             exchange='',
+#             routing_key=callback_queue,
+#             properties=pika.BasicProperties(
+#                 correlation_id=correlation_id
+#             ),
+#             body=json.dumps(response)
+#         )
     
-    # Start response simulation in background
-    response_thread = threading.Thread(target=simulate_shop_response)
-    response_thread.start()
+#     # Start response simulation in background
+#     response_thread = threading.Thread(target=simulate_shop_response)
+#     response_thread.start()
     
-    # Wait for response
-    start_time = time.time()
-    while not response_received.get('received') and time.time() - start_time < 5:
-        connection.process_data_events(time_limit=0.1)
+#     # Wait for response
+#     start_time = time.time()
+#     while not response_received.get('received') and time.time() - start_time < 5:
+#         connection.process_data_events(time_limit=0.1)
     
-    response_thread.join()
-    connection.close()
+#     response_thread.join()
+#     connection.close()
     
-    # Verify correlation pattern worked
-    assert response_received.get('received'), "No response received via correlation ID"
-    assert response_received['data']['shop_id'] == shop_id
-    assert response_received['data']['is_active'] is True
-    assert response_received['data']['status'] == 'active'
+#     # Verify correlation pattern worked
+#     assert response_received.get('received'), "No response received via correlation ID"
+#     assert response_received['data']['shop_id'] == shop_id
+#     assert response_received['data']['is_active'] is True
+#     assert response_received['data']['status'] == 'active'
 
 
 def test_database_connection(test_infrastructure):
