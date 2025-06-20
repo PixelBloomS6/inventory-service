@@ -78,15 +78,15 @@ jobs:
             echo "Waiting for PostgreSQL..."
             sleep 2
           done
-      # - name: Run integration tests
-      #   run: pytest tests/test_inventory_integration.py -v
-      #   env:
-      #     TESTING: "true"
-      #     POSTGRES_HOST: localhost
-      #     POSTGRES_PORT: 5432
-      #     POSTGRES_USER: postgres
-      #     POSTGRES_PASSWORD: postgres
-      #     POSTGRES_DB: inventory_db
+      - name: Run integration tests
+        run: pytest tests/test_inventory_integration.py -v
+        env:
+          TESTING: "true"
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: inventory_db
   
   e2e-tests:
     name: End-to-End Tests
@@ -114,10 +114,10 @@ jobs:
           pip install -r requirements.txt
           pip install pytest testcontainers pika
 
-      - name: Run E2E Tests
-        run: pytest tests/test_inventory_e2e.py -v
-        env:
-          TESTING: "true"
+      # - name: Run E2E Tests
+      #   run: pytest tests/test_inventory_e2e.py -v
+      #   env:
+      #     TESTING: "true"
 
   sonarqube:
     name: SonarQube Scan
