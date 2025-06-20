@@ -218,28 +218,28 @@ class InventoryService:
             #     }
             # )
         
-        return updated_item
+    #     return updated_item
 
-    def delete_item(self, item_id: uuid.UUID) -> bool:
-        item = self.repository.get_by_id(item_id)
-        if not item:
-            return False
+    # def delete_item(self, item_id: uuid.UUID) -> bool:
+    #     item = self.repository.get_by_id(item_id)
+    #     if not item:
+    #         return False
             
-        success = self.repository.delete(item_id)
+    #     success = self.repository.delete(item_id)
         
-        # if success:
-        #     # Publish inventory item deleted event
-        #     self.publisher.publish_event(
-        #         exchange="inventory_events",
-        #         routing_key="inventory.deleted",
-        #         body={
-        #             "event_type": "inventory_item_deleted",
-        #             "item_id": str(item_id),
-        #             "shop_id": str(item.shop_id)
-        # #         }
-        #     )
+    #     # if success:
+    #     #     # Publish inventory item deleted event
+    #     #     self.publisher.publish_event(
+    #     #         exchange="inventory_events",
+    #     #         routing_key="inventory.deleted",
+    #     #         body={
+    #     #             "event_type": "inventory_item_deleted",
+    #     #             "item_id": str(item_id),
+    #     #             "shop_id": str(item.shop_id)
+    #     # #         }
+    #     #     )
         
-        return success
+    #     return success
     
     
     # def update_item_images(self, item_id: uuid.UUID, image_urls: List[str]) -> Optional[InventoryItem]:
