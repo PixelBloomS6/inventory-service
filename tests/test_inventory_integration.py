@@ -1,7 +1,7 @@
 import os
 import sys
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from urllib.parse import urlparse
 from testcontainers.postgres import PostgresContainer
@@ -106,5 +106,5 @@ def test_database_connection(test_db):
     
     # Try to connect to the database
     with engine.connect() as connection:
-        result = connection.execute("SELECT 1 as test")
+        result = connection.execute(text("SELECT 1 as test"))
         assert result.fetchone()[0] == 1
