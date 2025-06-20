@@ -4,10 +4,11 @@ from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTEN
 import uvicorn
 import time
 from .routers.inventory_router import router as inventory_router
-from .db.database import Base, engine
+from .db.database import Base, get_engine
+
 
 # Create tables in the database
-Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(bind=get_engine())
 
 # Prometheus metrics
 REQUEST_COUNT = Counter(
