@@ -1,70 +1,81 @@
-import pytest
-import uuid
-import json
+import os
 import time
-
+import pytest
+import pika
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from fastapi.testclient import TestClient
 from testcontainers.postgres import PostgresContainer
 from testcontainers.rabbitmq import RabbitMqContainer
 
-from app.main import app
-from app.database import Base, get_db
-from app.services.inventory_service import InventoryService
-from app.models.domain.inventory import InventoryItemCreate
-from app.services.inventory_service import RabbitMQPublisher
+from fastapi.testclient import TestClient
 
-# Override DB session
+from app.main import app  # Replace with actual FastAPI app entry
+from app.db.base import Base  # Replace with your SQLAlchemy base
+from app.dependencies import get_db  # Your db dependency override
+
+# Override FastAPI DB session with test DB session
 @pytest.fixture(scope="module")
-def db_session():
-    with PostgresContainer("postgres:15") as postgres:
-        engine = create_engine(postgres.get_connection_url())
+def test_env():
+    with PostgresContainer("postgres:15") as pg, RabbitMqContainer("rabbitmq:3-management") as rmq:
+        # PostgreSQL
+        db_url = pg.get_connection_url()
+        engine = create_engine(db_url)
         TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         Base.metadata.create_all(bind=engine)
-        session = TestingSessionLocal()
-        yield session
-        session.close()
 
-# Override RabbitMQ container
-@pytest.fixture(scope="module")
-def rabbitmq_container():
-    with RabbitMqContainer("rabbitmq:3.11.11") as rabbitmq:
-        time.sleep(5)  # wait for queues to fully boot up
-        yield rabbitmq
+        def override_get_db():
+            db = TestingSessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
 
-@pytest.fixture(scope="module")
-def service(db_session, rabbitmq_container):
-    rmq_url = rabbitmq_container.get_amqp_url()
-    host = rabbitmq_container.get_container_host_ip()
-    port = rabbitmq_container.get_exposed_port(5672)
+        app.dependency_overrides[get_db] = override_get_db
 
-    # Set ENV variables for RabbitMQ connection
-    import os
-    os.environ["RABBITMQ_HOST"] = host
-    os.environ["RABBITMQ_PORT"] = port
-    os.environ["RABBITMQ_USER"] = "guest"
-    os.environ["RABBITMQ_PASSWORD"] = "guest"
-    os.environ["TESTING"] = "true"
+        # RabbitMQ
+        rmq_host = rmq.get_container_host_ip()
+        rmq_port = rmq.get_exposed_port(5672)
 
-    publisher = RabbitMQPublisher()
-    return InventoryService(db_session, publisher)
+        os.environ["RABBITMQ_HOST"] = rmq_host
+        os.environ["RABBITMQ_PORT"] = rmq_port
+        os.environ["RABBITMQ_USER"] = "guest"
+        os.environ["RABBITMQ_PASSWORD"] = "guest"
+        os.environ["TESTING"] = "true"
 
-def test_create_inventory_item_e2e(service):
-    test_item = InventoryItemCreate(
-        shop_id=uuid.uuid4(),
-        name="Test Bouquet",
-        category="Roses",
-        price=29.99,
-        quantity=10,
-    )
+        # Setup RabbitMQ
+        connection = pika.BlockingConnection(pika.ConnectionParameters(
+            host=rmq_host,
+            port=int(rmq_port),
+            credentials=pika.PlainCredentials("guest", "guest")
+        ))
+        channel = connection.channel()
+        channel.exchange_declare(exchange="inventory_events", exchange_type="topic")
+        channel.exchange_declare(exchange="shop_events", exchange_type="topic")
+        connection.close()
 
-    created_item = service.create_item(test_item)
+        yield {
+            "db_session": TestingSessionLocal,
+            "rmq_host": rmq_host,
+            "rmq_port": rmq_port
+        }
 
-    assert created_item.name == "Test Bouquet"
-    assert created_item.price == 29.99
-    assert created_item.quantity == 10
+@pytest.fixture()
+def client(test_env):
+    return TestClient(app)
 
-    # Note: Actual event verification requires a consumer or RabbitMQ spy
-    print("E2E inventory item created and events dispatched.")
+def test_create_inventory_item(client):
+    item_data = {
+        "shop_id": "11111111-1111-1111-1111-111111111111",
+        "name": "Test Bouquet",
+        "category": "Roses",
+        "price": 29.99,
+        "quantity": 10
+    }
+
+    response = client.post("/inventory/items", json=item_data)
+    assert response.status_code == 201, response.text
+    data = response.json()
+    assert data["name"] == item_data["name"]
+    assert data["price"] == item_data["price"]
+    assert data["quantity"] == item_data["quantity"]
