@@ -8,44 +8,52 @@ on:
 jobs:
   zap_scan:
     runs-on: ubuntu-latest
-    services:
-      app:
-        image: your-image-name:latest
-        build:
-          context: .
-        ports:
-          - 8001:8001  # your app port
-        options: >-
-          --health-cmd="curl --fail http://localhost:8001/health || exit 1"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build OWASP ZAP container
-        run: |
-          docker pull owasp/zap2docker-stable
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Wait for App to be ready
+      - name: Build FastAPI App Docker Image
         run: |
-          echo "Waiting for app container to be healthy..."
+          docker build -t pixelbloom-app .
+
+      - name: Create Docker network
+        run: |
+          docker network create zap-net
+
+      - name: Run FastAPI App container
+        run: |
+          docker run -d --rm \
+            --name pixelbloom-app \
+            --network zap-net \
+            -p 8001:8001 \
+            pixelbloom-app
+
+      - name: Wait for App to Become Healthy
+        run: |
+          echo "Waiting for app to become healthy..."
           for i in {1..20}; do
-            curl -s http://localhost:8001/health && break
+            if curl -s http://localhost:8001/health; then
+              echo "App is up!"
+              break
+            fi
             sleep 5
           done
 
-      - name: Run ZAP Scan
+      - name: Run OWASP ZAP Scan
         run: |
           docker run --rm \
-            --network host \
+            --network zap-net \
+            -v $(pwd):/zap/wrk:rw \
             owasp/zap2docker-stable zap-baseline.py \
-            -t http://localhost:8001 \
-            -g gen.conf -r zap_report.html
+            -t http://pixelbloom-app:8001 \
+            -g gen.conf \
+            -r zap_report.html
 
-      - name: Upload ZAP report
+      - name: Upload ZAP Report
         uses: actions/upload-artifact@v4
         with:
           name: zap-report

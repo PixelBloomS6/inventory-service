@@ -172,39 +172,39 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy-to-azure:
-    name: Deploy to Azure AKS
-    runs-on: ubuntu-latest
-    needs: build-and-push-docker
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  # deploy-to-azure:
+  #   name: Deploy to Azure AKS
+  #   runs-on: ubuntu-latest
+  #   needs: build-and-push-docker
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
 
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+  #     - name: Azure Login
+  #       uses: azure/login@v1
+  #       with:
+  #         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Get AKS credentials
-        run: |
-          az aks get-credentials --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_AKS_CLUSTER }}
+  #     - name: Get AKS credentials
+  #       run: |
+  #         az aks get-credentials --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_AKS_CLUSTER }}
 
-      - name: Update Kubernetes manifests
-        run: |
-          sed -i 's|image: .*|image: ${{ env.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}|' k8s/azure-k8s-manifests.yaml
+  #     - name: Update Kubernetes manifests
+  #       run: |
+  #         sed -i 's|image: .*|image: ${{ env.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}|' k8s/azure-k8s-manifests.yaml
 
-      - name: Deploy to AKS
-        run: |
-          kubectl apply -f k8s/azure-k8s-manifests.yaml
+  #     - name: Deploy to AKS
+  #       run: |
+  #         kubectl apply -f k8s/azure-k8s-manifests.yaml
 
-      - name: Wait for deployment rollout
-        run: |
-          kubectl rollout status deployment/inventory-service -n pixelbloom-prod --timeout=300s
+  #     - name: Wait for deployment rollout
+  #       run: |
+  #         kubectl rollout status deployment/inventory-service -n pixelbloom-prod --timeout=300s
 
-      - name: Verify deployment
-        run: |
-          kubectl get pods -n pixelbloom-prod
-          kubectl get svc -n pixelbloom-prod
-          kubectl get hpa -n pixelbloom-prod
+  #     - name: Verify deployment
+  #       run: |
+  #         kubectl get pods -n pixelbloom-prod
+  #         kubectl get svc -n pixelbloom-prod
+  #         kubectl get hpa -n pixelbloom-prod
