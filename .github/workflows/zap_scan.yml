@@ -45,6 +45,12 @@ jobs:
 
       - name: Create writable folder for ZAP output
         run: mkdir -p zap-output
+      
+      - name: Create writable folder for ZAP output
+        run: |
+          mkdir -p zap-output
+          chmod 777 zap-output
+
 
       - name: Run OWASP ZAP Scan
         run: |
