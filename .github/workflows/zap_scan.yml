@@ -22,7 +22,7 @@ jobs:
 
       - name: Create Docker network
         run: |
-          docker network create zap-net
+          docker network create zap-net || echo "Network already exists"
 
       - name: Run FastAPI App container
         run: |
@@ -50,7 +50,7 @@ jobs:
         run: |
           docker run --rm \
             --network zap-net \
-            -v $(pwd)/zap-output:/zap/wrk:rw \
+            -v ${{ github.workspace }}/zap-output:/zap/wrk:rw \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
             -t http://pixelbloom-app:8001 \
