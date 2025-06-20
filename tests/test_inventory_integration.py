@@ -38,12 +38,15 @@ def test_infrastructure():
         os.environ["POSTGRES_DB"] = parsed_pg.path.lstrip("/")
         
         # Setup RabbitMQ
-        rabbitmq_url = rabbitmq.get_connection_url()
-        parsed_rmq = urlparse(rabbitmq_url)
-        os.environ["RABBITMQ_HOST"] = parsed_rmq.hostname
-        os.environ["RABBITMQ_PORT"] = str(parsed_rmq.port)
-        os.environ["RABBITMQ_USER"] = parsed_rmq.username or "guest"
-        os.environ["RABBITMQ_PASSWORD"] = parsed_rmq.password or "guest"
+        rabbitmq_host = rabbitmq.get_container_host_ip()
+        rabbitmq_port = rabbitmq.get_exposed_port(5672)
+        rabbitmq_user = "guest"
+        rabbitmq_password = "guest"
+        
+        os.environ["RABBITMQ_HOST"] = rabbitmq_host
+        os.environ["RABBITMQ_PORT"] = str(rabbitmq_port)
+        os.environ["RABBITMQ_USER"] = rabbitmq_user
+        os.environ["RABBITMQ_PASSWORD"] = rabbitmq_password
         os.environ["TESTING"] = "true"
         
         # Wait for RabbitMQ to be ready
@@ -52,12 +55,9 @@ def test_infrastructure():
         # Setup RabbitMQ exchanges and queues
         connection = pika.BlockingConnection(
             pika.ConnectionParameters(
-                host=parsed_rmq.hostname,
-                port=parsed_rmq.port,
-                credentials=pika.PlainCredentials(
-                    parsed_rmq.username or "guest",
-                    parsed_rmq.password or "guest"
-                )
+                host=rabbitmq_host,
+                port=rabbitmq_port,
+                credentials=pika.PlainCredentials(rabbitmq_user, rabbitmq_password)
             )
         )
         channel = connection.channel()
@@ -100,12 +100,11 @@ def test_infrastructure():
         
         yield {
             'client': client,
-            'rabbitmq_url': rabbitmq_url,
             'database_url': database_url,
-            'rabbitmq_host': parsed_rmq.hostname,
-            'rabbitmq_port': parsed_rmq.port,
-            'rabbitmq_user': parsed_rmq.username or "guest",
-            'rabbitmq_password': parsed_rmq.password or "guest"
+            'rabbitmq_host': rabbitmq_host,
+            'rabbitmq_port': rabbitmq_port,
+            'rabbitmq_user': rabbitmq_user,
+            'rabbitmq_password': rabbitmq_password
         }
         
         # Cleanup
