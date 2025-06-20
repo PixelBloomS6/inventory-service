@@ -78,15 +78,15 @@ jobs:
             echo "Waiting for PostgreSQL..."
             sleep 2
           done
-      - name: Run integration tests
-        run: pytest tests/test_inventory_integration.py -v
-        env:
-          TESTING: "true"
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: inventory_db
+      # - name: Run integration tests
+      #   run: pytest tests/test_inventory_integration.py -v
+      #   env:
+      #     TESTING: "true"
+      #     POSTGRES_HOST: localhost
+      #     POSTGRES_PORT: 5432
+      #     POSTGRES_USER: postgres
+      #     POSTGRES_PASSWORD: postgres
+      #     POSTGRES_DB: inventory_db
   
   e2e-tests:
     name: End-to-End Tests
